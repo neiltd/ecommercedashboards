@@ -268,7 +268,7 @@ This makes the dashboard safe to use with real business data.
 
 ## 🗺️ Roadmap
 
-- [ ] **Option C — Advanced Features**
+- [ ] **Advanced Features**
   - [ ] SLA Breakdown Table (per-state delay rates)
   - [ ] Delay by State heatmap
   - [ ] CSV Export button for aggregated metrics
