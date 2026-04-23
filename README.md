@@ -2,7 +2,7 @@
 
 > A high-performance, client-side Business Analytics dashboard built with vanilla HTML, Tailwind CSS, and Chart.js. This project focuses on operational efficiency — specifically tracking delivery delays, regional customer concentration, and transaction volume trends using the **Olist Brazilian E-Commerce** public dataset.
 
-🌐 **Live Demo:** [https://YOUR_USERNAME.github.io/ecom-analytics-dashboard](https://YOUR_USERNAME.github.io/ecom-analytics-dashboard)
+🌐 **Live Demo:** [https://neiltd.github.io/ecommercedashboards](https://neiltd.github.io/ecommercedashboards)
 
 ---
 
