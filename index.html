@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Commerce Operations & Logistics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg:        #060910;
+            --surface:   #0d1117;
+            --panel:     #111820;
+            --border:    #1e2d3d;
+            --border-hi: #2e4a63;
+            --text:      #e2eaf4;
+            --muted:     #506070;
+            --cyan:      #00d4ff;
+            --emerald:   #00e5a0;
+            --violet:    #a78bfa;
+            --rose:      #ff4d6d;
+            --amber:     #fbbf24;
+            --cyan-dim:  rgba(0,212,255,0.08);
+            --emerald-dim: rgba(0,229,160,0.08);
+            --violet-dim:  rgba(167,139,250,0.08);
+            --rose-dim:    rgba(255,77,109,0.08);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            /* subtle grid background */
+            background-image:
+                linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+
+        /* ── Mono font ── */
+        .mono { font-family: 'Space Mono', monospace; }
+
+        /* ── Glass panel ── */
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+        .panel-glow-cyan  { box-shadow: 0 0 0 1px rgba(0,212,255,0.15), inset 0 1px 0 rgba(0,212,255,0.05); }
+        .panel-glow-emerald { box-shadow: 0 0 0 1px rgba(0,229,160,0.15), inset 0 1px 0 rgba(0,229,160,0.05); }
+        .panel-glow-violet { box-shadow: 0 0 0 1px rgba(167,139,250,0.15), inset 0 1px 0 rgba(167,139,250,0.05); }
+        .panel-glow-rose { box-shadow: 0 0 0 1px rgba(255,77,109,0.15), inset 0 1px 0 rgba(255,77,109,0.05); }
+
+        /* ── Chart containers ── */
+        .chart-wrap {
+            position: relative;
+            width: 100%;
+            height: 300px;
+        }
+        @media(min-width:768px) { .chart-wrap { height: 340px; } }
+
+        /* ── Upload rows ── */
+        .upload-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--muted);
+        }
+        .upload-row:hover { border-color: var(--border-hi); color: var(--text); }
+        .upload-row.loaded {
+            border-color: rgba(0,212,255,0.4);
+            background: rgba(0,212,255,0.05);
+            color: var(--cyan);
+        }
+
+        /* ── KPI cards ── */
+        .kpi-card {
+            padding: 20px;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .kpi-card:hover { transform: translateY(-2px); }
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+        }
+        .kpi-card.cyan::before  { background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+        .kpi-card.emerald::before { background: linear-gradient(90deg, transparent, var(--emerald), transparent); }
+        .kpi-card.violet::before { background: linear-gradient(90deg, transparent, var(--violet), transparent); }
+        .kpi-card.rose::before   { background: linear-gradient(90deg, transparent, var(--rose), transparent); }
+
+        .kpi-glyph {
+            font-size: 28px;
+            line-height: 1;
+            margin-bottom: 12px;
+            opacity: 0.9;
+        }
+        .kpi-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 9px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+        .kpi-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1;
+        }
+        .kpi-sub {
+            font-size: 11px;
+            margin-top: 8px;
+            opacity: 0.7;
+        }
+
+        /* ── Status badge ── */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border: 1px solid;
+            transition: all 0.4s ease;
+        }
+        .status-badge.offline {
+            border-color: rgba(255,77,109,0.3);
+            background: rgba(255,77,109,0.07);
+            color: var(--rose);
+        }
+        .status-badge.online {
+            border-color: rgba(0,229,160,0.3);
+            background: rgba(0,229,160,0.07);
+            color: var(--emerald);
+        }
+        .pulse {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            animation: pulse 1.8s ease-in-out infinite;
+        }
+        .pulse.rose   { background: var(--rose); box-shadow: 0 0 0 0 rgba(255,77,109,0.6); }
+        .pulse.emerald { background: var(--emerald); box-shadow: 0 0 0 0 rgba(0,229,160,0.6); }
+        @keyframes pulse {
+            0%   { transform: scale(1);   box-shadow: 0 0 0 0 currentColor; opacity:1; }
+            70%  { transform: scale(1.1); box-shadow: 0 0 0 5px transparent; opacity:0.7; }
+            100% { transform: scale(1);   box-shadow: 0 0 0 0 transparent; opacity:1; }
+        }
+
+        /* ── Process button ── */
+        #process-btn {
+            width: 100%;
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 10px;
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 700;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--muted);
+            cursor: not-allowed;
+            transition: all 0.3s ease;
+        }
+        #process-btn.ready {
+            background: var(--cyan);
+            color: var(--bg);
+            border-color: var(--cyan);
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(0,212,255,0.3);
+        }
+        #process-btn.ready:hover {
+            background: #33ddff;
+            box-shadow: 0 0 30px rgba(0,212,255,0.5);
+            transform: translateY(-1px);
+        }
+        #process-btn.synced {
+            background: var(--emerald);
+            color: var(--bg);
+            border-color: var(--emerald);
+            cursor: default;
+            box-shadow: 0 0 20px rgba(0,229,160,0.3);
+        }
+
+        /* ── Section headers ── */
+        .section-tag {
+            font-family: 'Space Mono', monospace;
+            font-size: 9px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 999px;
+            border: 1px solid currentColor;
+            opacity: 0.7;
+        }
+
+        /* ── Empty state ── */
+        #empty-state {
+            position: absolute;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(6,9,16,0.85);
+            backdrop-filter: blur(6px);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+        .empty-icon {
+            width: 72px; height: 72px;
+            border-radius: 18px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+
+        /* ── Dashboard content fade-in ── */
+        .dash-content {
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        .dash-content.visible {
+            opacity: 1;
+            transform: none;
+        }
+        .dash-content.delay-1 { transition-delay: 0.1s; }
+        .dash-content.delay-2 { transition-delay: 0.2s; }
+        .dash-content.delay-3 { transition-delay: 0.3s; }
+
+        /* ── Toggle ── */
+        .toggle-btn {
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .toggle-btn.active {
+            border-color: var(--cyan);
+            background: rgba(0,212,255,0.1);
+            color: var(--cyan);
+        }
+
+        /* ── Accent divider ── */
+        .accent-line {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-hi), transparent);
+            margin: 20px 0;
+        }
+
+        /* ── Footer ── */
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 16px 24px;
+            text-align: center;
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            color: var(--muted);
+            letter-spacing: 0.1em;
+        }
+
+        /* ── Stat row in sidebar ── */
+        .sidebar-stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+        }
+        .sidebar-stat:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+
+    <!-- ═══════════════════════════════════════════ HEADER -->
+    <header style="border-bottom:1px solid var(--border); background:rgba(6,9,16,0.9); backdrop-filter:blur(12px); position:sticky; top:0; z-index:50;">
+        <div style="max-width:1400px; margin:0 auto; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; align-items:center; gap:14px;">
+                <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.2));border:1px solid var(--border-hi);display:flex;align-items:center;justify-content:center;font-size:18px;">📦</div>
+                <div>
+                    <div class="mono" style="font-size:13px;font-weight:700;letter-spacing:0.05em;color:var(--text);">OLIST <span style="color:var(--cyan);">ANALYTICS</span></div>
+                    <div class="mono" style="font-size:9px;letter-spacing:0.2em;color:var(--muted);text-transform:uppercase;">E-Commerce Operations Dashboard</div>
+                </div>
+            </div>
+            <div id="status-badge" class="status-badge offline">
+                <div class="pulse rose"></div>
+                <span>System Offline</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════ MAIN -->
+    <main style="max-width:1400px; margin:0 auto; padding:28px 24px; display:grid; grid-template-columns:1fr; gap:24px;">
+
+        <div style="display:grid; grid-template-columns:280px 1fr; gap:24px; align-items:start;">
+
+            <!-- ─── SIDEBAR ─── -->
+            <aside>
+
+                <!-- Data Ingestion -->
+                <div class="panel" style="padding:22px; margin-bottom:16px;">
+                    <div class="mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">01 / Data Ingestion</div>
+                    <h2 style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px;">Upload Datasets</h2>
+                    <p style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:18px;">Upload 5 relational Olist CSV files. All processing happens locally in your browser — no data is sent anywhere.</p>
+
+                    <div id="upload-container" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+                    <button id="process-btn" disabled>Awaiting files…</button>
+                </div>
+
+                <!-- Data Schema Reference -->
+                <div class="panel" style="padding:22px; margin-bottom:16px;">
+                    <div class="mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">02 / Schema Reference</div>
+                    <div style="font-size:11px;color:var(--muted);line-height:1.9;">
+                        <div class="sidebar-stat">
+                            <span>orders_rev_df</span>
+                            <span style="color:var(--cyan);font-family:'Space Mono',monospace;font-size:9px;">PRIMARY</span>
+                        </div>
+                        <div class="sidebar-stat">
+                            <span>df_OrderItems</span>
+                            <span style="color:var(--violet);font-family:'Space Mono',monospace;font-size:9px;">JOIN</span>
+                        </div>
+                        <div class="sidebar-stat">
+                            <span>df_Products</span>
+                            <span style="color:var(--violet);font-family:'Space Mono',monospace;font-size:9px;">JOIN</span>
+                        </div>
+                        <div class="sidebar-stat">
+                            <span>df_Customers</span>
+                            <span style="color:var(--violet);font-family:'Space Mono',monospace;font-size:9px;">JOIN</span>
+                        </div>
+                        <div class="sidebar-stat">
+                            <span>df_Payments</span>
+                            <span style="color:var(--violet);font-family:'Space Mono',monospace;font-size:9px;">JOIN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SLA Definition -->
+                <div class="panel" style="padding:22px;">
+                    <div class="mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">03 / SLA Definition</div>
+                    <p style="font-size:11px;color:var(--muted);line-height:1.7;">An order is flagged <span style="color:var(--rose);">LATE</span> when <code style="font-family:'Space Mono',monospace;font-size:10px;background:var(--surface);padding:1px 5px;border-radius:4px;">delivered_ts &gt; estimated_ts</code> or when status is <code style="font-family:'Space Mono',monospace;font-size:10px;background:var(--surface);padding:1px 5px;border-radius:4px;">canceled / unavailable</code>.</p>
+                </div>
+
+            </aside>
+
+            <!-- ─── DASHBOARD WORKSPACE ─── -->
+            <section style="position:relative; min-height:600px;">
+
+                <!-- Empty State Overlay -->
+                <div id="empty-state">
+                    <div class="empty-icon">📊</div>
+                    <h3 style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:8px;">Workspace Empty</h3>
+                    <p style="font-size:12px;color:var(--muted);text-align:center;max-width:320px;line-height:1.6;">Upload your 5 Olist datasets to unlock logistics and business intelligence across the full dashboard.</p>
+                    <div class="mono" style="margin-top:20px;font-size:10px;color:var(--border-hi);letter-spacing:0.1em;">← Upload panel on the left</div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:24px;">
+
+                    <!-- KPI Row -->
+                    <div class="dash-content" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+                        <div class="kpi-card cyan">
+                            <div class="kpi-glyph">💰</div>
+                            <div class="kpi-label">Gross Revenue</div>
+                            <div class="kpi-value" id="kpi-revenue">—</div>
+                            <div class="kpi-sub" style="color:var(--cyan);">Price + Shipping</div>
+                        </div>
+                        <div class="kpi-card emerald">
+                            <div class="kpi-glyph">📦</div>
+                            <div class="kpi-label">Total Orders</div>
+                            <div class="kpi-value" id="kpi-transactions">—</div>
+                            <div class="kpi-sub" style="color:var(--emerald);">Unique transactions</div>
+                        </div>
+                        <div class="kpi-card violet">
+                            <div class="kpi-glyph">👥</div>
+                            <div class="kpi-label">Active Customers</div>
+                            <div class="kpi-value" id="kpi-customers">—</div>
+                            <div class="kpi-sub" style="color:var(--violet);">Order-linked IDs</div>
+                        </div>
+                        <div class="kpi-card rose">
+                            <div class="kpi-glyph">⚠️</div>
+                            <div class="kpi-label">SLA Delay Rate</div>
+                            <div class="kpi-value" id="kpi-delay">—</div>
+                            <div class="kpi-sub" style="color:var(--rose);">Late + Canceled</div>
+                        </div>
+                    </div>
+
+                    <!-- Logistics Section -->
+                    <div class="panel dash-content delay-1" style="padding:24px;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;flex-wrap:wrap;gap:12px;">
+                            <div>
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                                    <span style="font-size:18px;">🚚</span>
+                                    <h3 style="font-size:16px;font-weight:700;color:var(--text);">Logistics Performance</h3>
+                                    <span class="section-tag" style="color:var(--cyan);">Operational</span>
+                                </div>
+                                <p style="font-size:12px;color:var(--muted);max-width:560px;line-height:1.6;">Transaction volume over time reveals seasonal bottlenecks. The ordering heatmap surfaces peak stress windows for supply chain planning.</p>
+                            </div>
+                        </div>
+                        <div class="accent-line"></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                            <!-- Volume Trend -->
+                            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+                                    <span class="mono" style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--cyan);">Transaction Volume</span>
+                                    <div style="display:flex;gap:6px;" id="time-toggles">
+                                        <button class="toggle-btn active" data-scale="monthly">Monthly</button>
+                                        <button class="toggle-btn" data-scale="weekly">Weekly</button>
+                                        <button class="toggle-btn" data-scale="yearly">Yearly</button>
+                                    </div>
+                                </div>
+                                <div class="chart-wrap"><canvas id="chart-volume"></canvas></div>
+                            </div>
+                            <!-- Heatmap -->
+                            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                                    <span class="mono" style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--rose);">24/7 Order Heatmap</span>
+                                    <span class="mono" style="font-size:9px;color:var(--muted);">Bubble size = volume</span>
+                                </div>
+                                <div class="chart-wrap"><canvas id="chart-heatmap"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Business Metrics Section -->
+                    <div class="panel dash-content delay-2" style="padding:24px;">
+                        <div style="margin-bottom:6px;">
+                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+                                <span style="font-size:18px;">📈</span>
+                                <h3 style="font-size:16px;font-weight:700;color:var(--text);">Business Metrics & Demographics</h3>
+                                <span class="section-tag" style="color:var(--emerald);">Revenue</span>
+                            </div>
+                            <p style="font-size:12px;color:var(--muted);max-width:560px;line-height:1.6;">Revenue by product category and geographic customer concentration — the two pillars of fulfillment and marketing strategy.</p>
+                        </div>
+                        <div class="accent-line"></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                            <!-- Category Revenue -->
+                            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;">
+                                <span class="mono" style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--emerald);display:block;margin-bottom:14px;">Top 10 Categories by Revenue</span>
+                                <div class="chart-wrap"><canvas id="chart-category"></canvas></div>
+                            </div>
+                            <!-- Geographic Distribution -->
+                            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;">
+                                <span class="mono" style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--violet);display:block;margin-bottom:14px;">Customer Density by State</span>
+                                <div class="chart-wrap"><canvas id="chart-geo"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div><!-- end flex column -->
+            </section><!-- end workspace -->
+
+        </div><!-- end grid -->
+    </main>
+
+    <footer>
+        <span class="mono">OLIST ANALYTICS DASHBOARD</span>
+        &nbsp;·&nbsp; Built with Chart.js + PapaParse &nbsp;·&nbsp; All processing is client-side
+    </footer>
+
+    <!-- ═══════════════════════════════════════════ SCRIPT -->
+    <script>
+    // ── State ──────────────────────────────────────────────
+    const S = {
+        files: {
+            orders:   { file:null, data:null, label:'Orders Data',  hint:'orders_rev_df.csv' },
+            items:    { file:null, data:null, label:'Order Items',   hint:'df_OrderItems.csv' },
+            products: { file:null, data:null, label:'Product Info',  hint:'df_Products.csv' },
+            customers:{ file:null, data:null, label:'Customers',     hint:'df_Customers.csv' },
+            payments: { file:null, data:null, label:'Payments',      hint:'df_Payments.csv' }
+        },
+        data: {},
+        charts: {},
+        timeScale: 'monthly',
+        ready: false
+    };
+
+    // ── Boot ──────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        buildUploadUI();
+
+        document.getElementById('process-btn').addEventListener('click', runProcessing);
+
+        document.getElementById('time-toggles').addEventListener('click', (e) => {
+            const btn = e.target.closest('.toggle-btn');
+            if (!btn) return;
+            S.timeScale = btn.dataset.scale;
+            document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (S.charts.volume) updateVolumeChart();
+        });
+    });
+
+    // ── Upload UI ─────────────────────────────────────────
+    function buildUploadUI() {
+        const container = document.getElementById('upload-container');
+        const keys = Object.keys(S.files);
+        keys.forEach((key, idx) => {
+            const def = S.files[key];
+            const label = document.createElement('label');
+            label.className = 'upload-row';
+            label.id = `row-${key}`;
+            label.innerHTML = `
+                <div style="display:flex;align-items:center;gap:10px;overflow:hidden;flex:1;">
+                    <span style="font-size:14px;flex-shrink:0;">📄</span>
+                    <div style="overflow:hidden;">
+                        <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${def.label}</div>
+                        <div style="font-family:'Space Mono',monospace;font-size:9px;opacity:0.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="hint-${key}">${def.hint}</div>
+                    </div>
+                </div>
+                <div id="dot-${key}" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0;transition:all 0.3s;"></div>
+                <input type="file" accept=".csv" class="hidden" id="input-${key}" style="display:none;">
+            `;
+            container.appendChild(label);
+            document.getElementById(`input-${key}`).addEventListener('change', e => onFileChange(e, key));
+        });
+    }
+
+    function onFileChange(event, key) {
+        const file = event.target.files[0];
+        if (!file) return;
+        S.files[key].file = file;
+
+        // Count rows quickly
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const lines = e.target.result.split('\n').filter(l => l.trim()).length - 1;
+            document.getElementById(`hint-${key}`).innerHTML =
+                `<span style="color:var(--text);">${file.name}</span> <span style="color:var(--cyan);">[${lines.toLocaleString()} rows]</span>`;
+        };
+        reader.readAsText(file.slice(0, 4_000_000));
+
+        document.getElementById(`row-${key}`).classList.add('loaded');
+        const dot = document.getElementById(`dot-${key}`);
+        dot.style.background = 'var(--cyan)';
+        dot.style.boxShadow = '0 0 8px var(--cyan)';
+
+        checkReady();
+    }
+
+    function checkReady() {
+        const allLoaded = Object.values(S.files).every(f => f.file !== null);
+        const btn = document.getElementById('process-btn');
+        if (allLoaded) {
+            btn.disabled = false;
+            btn.textContent = 'Generate Analytics →';
+            btn.classList.add('ready');
+        }
+    }
+
+    // ── Processing ────────────────────────────────────────
+    async function runProcessing() {
+        const btn = document.getElementById('process-btn');
+        btn.textContent = 'Parsing CSVs…';
+        btn.classList.remove('ready');
+        btn.disabled = true;
+
+        try {
+            await Promise.all(Object.keys(S.files).map(key =>
+                new Promise((res, rej) => {
+                    Papa.parse(S.files[key].file, {
+                        header: true,
+                        skipEmptyLines: true,
+                        complete: r => { S.files[key].data = r.data; res(); },
+                        error: rej
+                    });
+                })
+            ));
+
+            btn.textContent = 'Aggregating…';
+            setTimeout(aggregate, 80);
+        } catch(err) {
+            console.error(err);
+            alert('Error parsing one of the CSV files. Please check the file format.');
+            btn.textContent = 'Retry';
+            btn.classList.add('ready');
+            btn.disabled = false;
+        }
+    }
+
+    // ── Date helpers ──────────────────────────────────────
+    function parseDate(s) {
+        if (!s) return null;
+        const p = s.split(/[- :]/);
+        if (p.length < 3) return null;
+        return new Date(p[0], p[1]-1, p[2], p[3]||0, p[4]||0, p[5]||0);
+    }
+    function isoWeek(d) {
+        const u = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        u.setUTCDate(u.getUTCDate() + 4 - (u.getUTCDay()||7));
+        const y = new Date(Date.UTC(u.getUTCFullYear(),0,1));
+        const w = Math.ceil((((u-y)/86400000)+1)/7);
+        return `${u.getUTCFullYear()}-W${String(w).padStart(2,'0')}`;
+    }
+
+    // ── Aggregate ─────────────────────────────────────────
+    function aggregate() {
+        const orders    = S.files.orders.data;
+        const items     = S.files.items.data;
+        const products  = S.files.products.data;
+        const customers = S.files.customers.data;
+
+        // Build lookup maps
+        const prodMap = new Map(products.map(p => [p.product_id, p.product_category_name || 'Unknown']));
+        const custMap = new Map(customers.map(c => [c.customer_id, c.customer_state]));
+
+        // Order-level aggregation
+        let delayed = 0;
+        const custIds   = new Set();
+        const tMonthly  = new Map();
+        const tWeekly   = new Map();
+        const tYearly   = new Map();
+        const heatMap   = new Map();
+
+        orders.forEach(o => {
+            if (o.customer_id) custIds.add(o.customer_id);
+
+            const delivered  = parseDate(o.order_delivered_timestamp);
+            const estimated  = parseDate(o.order_estimated_delivery_date);
+            const badStatus  = ['canceled','unavailable','invoiced','processing'].includes(o.order_status);
+            const lateDelivery = delivered && estimated && delivered > estimated;
+            if (badStatus || lateDelivery) delayed++;
+
+            const ts = parseDate(o.order_purchase_timestamp);
+            if (ts) {
+                const mo = `${ts.getFullYear()}-${String(ts.getMonth()+1).padStart(2,'0')}`;
+                const wk = isoWeek(ts);
+                const yr = `${ts.getFullYear()}`;
+                tMonthly.set(mo, (tMonthly.get(mo)||0)+1);
+                tWeekly.set(wk,  (tWeekly.get(wk)||0)+1);
+                tYearly.set(yr,  (tYearly.get(yr)||0)+1);
+
+                const hk = `${ts.getDay()}-${ts.getHours()}`;
+                heatMap.set(hk, (heatMap.get(hk)||0)+1);
+            }
+        });
+
+        // Item-level: revenue + category
+        let grossRevenue = 0;
+        const catMap = new Map();
+        items.forEach(item => {
+            const val = (parseFloat(item.price)||0) + (parseFloat(item.shipping_charges)||0);
+            grossRevenue += val;
+            const cat = prodMap.get(item.product_id) || 'Unknown';
+            catMap.set(cat, (catMap.get(cat)||0)+val);
+        });
+
+        // Geo
+        const geoMap = new Map();
+        orders.forEach(o => {
+            const st = custMap.get(o.customer_id);
+            if (st) geoMap.set(st, (geoMap.get(st)||0)+1);
+        });
+
+        // Heatmap bubbles
+        let maxH = 0;
+        heatMap.forEach(v => { if(v>maxH) maxH=v; });
+        const bubbles = [];
+        heatMap.forEach((count, key) => {
+            const [day, hour] = key.split('-').map(Number);
+            bubbles.push({ x:hour, y:day, r: Math.max(3, (count/maxH)*22), count });
+        });
+
+        // Store
+        S.data = {
+            revenue:      grossRevenue,
+            transactions: orders.length,
+            customers:    custIds.size,
+            delayed,
+            monthly:  [...tMonthly].map(([x,y])=>({x,y})).sort((a,b)=>a.x.localeCompare(b.x)),
+            weekly:   [...tWeekly ].map(([x,y])=>({x,y})).sort((a,b)=>a.x.localeCompare(b.x)),
+            yearly:   [...tYearly ].map(([x,y])=>({x,y})).sort((a,b)=>a.x.localeCompare(b.x)),
+            heatmap:  bubbles,
+            categories: [...catMap].map(([l,v])=>({l,v})).sort((a,b)=>b.v-a.v).slice(0,10),
+            geo:        [...geoMap].map(([l,v])=>({l,v})).sort((a,b)=>b.v-a.v).slice(0,10)
+        };
+
+        renderDashboard();
+    }
+
+    // ── Render ────────────────────────────────────────────
+    function renderDashboard() {
+        const d = S.data;
+        const rate = d.transactions ? ((d.delayed/d.transactions)*100).toFixed(1) : 0;
+
+        const rev = d.revenue;
+        const revFmt = rev >= 1_000_000
+            ? '$' + (rev / 1_000_000).toFixed(2) + 'M'
+            : '$' + (rev / 1_000).toFixed(1) + 'K';
+        document.getElementById('kpi-revenue').textContent = revFmt;
+        document.getElementById('kpi-transactions').textContent = d.transactions.toLocaleString();
+        document.getElementById('kpi-customers').textContent   = d.customers.toLocaleString();
+        document.getElementById('kpi-delay').textContent       = `${rate}%`;
+
+        // Status badge
+        const badge = document.getElementById('status-badge');
+        badge.className = 'status-badge online';
+        badge.innerHTML = `<div class="pulse emerald"></div><span>System Online</span>`;
+
+        // Hide empty state
+        document.getElementById('empty-state').style.display = 'none';
+
+        // Reveal content
+        document.querySelectorAll('.dash-content').forEach(el => el.classList.add('visible'));
+
+        // Draw charts
+        Chart.defaults.color = '#506070';
+        Chart.defaults.font.family = 'DM Sans, sans-serif';
+        updateVolumeChart();
+        renderHeatmap();
+        renderCategory();
+        renderGeo();
+
+        // Update button
+        const btn = document.getElementById('process-btn');
+        btn.textContent = '✓ Data Synced';
+        btn.classList.add('synced');
+    }
+
+    // ── Charts ────────────────────────────────────────────
+    const CHART_DEFAULTS = {
+        plugins: {
+            legend: { display:false },
+            tooltip: {
+                backgroundColor: '#0d1117',
+                titleColor: '#e2eaf4',
+                bodyColor: '#8899aa',
+                borderColor: '#1e2d3d',
+                borderWidth: 1,
+                padding: 10,
+                displayColors: false
+            }
+        }
+    };
+
+    function updateVolumeChart() {
+        const src = S.data[S.timeScale];
+        const labels = src.map(d=>d.x);
+        const data   = src.map(d=>d.y);
+
+        if (S.charts.volume) S.charts.volume.destroy();
+        const ctx = document.getElementById('chart-volume').getContext('2d');
+        const grad = ctx.createLinearGradient(0,0,0,300);
+        grad.addColorStop(0,'rgba(0,212,255,0.18)');
+        grad.addColorStop(1,'rgba(0,212,255,0)');
+
+        S.charts.volume = new Chart(ctx, {
+            type:'line',
+            data:{
+                labels,
+                datasets:[{
+                    data,
+                    borderColor:'#00d4ff',
+                    backgroundColor: grad,
+                    borderWidth:2,
+                    fill:true,
+                    tension:0.4,
+                    pointRadius:2,
+                    pointHoverRadius:5,
+                    pointBackgroundColor:'#00d4ff'
+                }]
+            },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                ...CHART_DEFAULTS,
+                scales:{
+                    x:{ grid:{display:false}, ticks:{maxTicksLimit:8,font:{size:10}} },
+                    y:{ grid:{color:'#1e2d3d'}, beginAtZero:true, ticks:{font:{size:10}} }
+                }
+            }
+        });
+    }
+
+    function renderHeatmap() {
+        if (S.charts.heatmap) S.charts.heatmap.destroy();
+        const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const ctx = document.getElementById('chart-heatmap').getContext('2d');
+
+        S.charts.heatmap = new Chart(ctx, {
+            type:'bubble',
+            data:{ datasets:[{
+                data: S.data.heatmap,
+                backgroundColor:'rgba(255,77,109,0.5)',
+                borderColor:'rgba(255,77,109,0.8)',
+                borderWidth:1
+            }] },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                plugins:{
+                    legend:{display:false},
+                    tooltip:{
+                        backgroundColor:'#0d1117',
+                        borderColor:'#1e2d3d',
+                        borderWidth:1,
+                        padding:10,
+                        callbacks:{
+                            label: ctx => {
+                                const d = ctx.raw;
+                                return `${days[d.y]}  ${d.x}:00 — ${d.count.toLocaleString()} orders`;
+                            }
+                        }
+                    }
+                },
+                scales:{
+                    x:{
+                        title:{display:true,text:'Hour of Day',color:'#506070',font:{size:10}},
+                        min:-1, max:24,
+                        ticks:{stepSize:3,font:{size:10}},
+                        grid:{color:'#1e2d3d'}
+                    },
+                    y:{
+                        title:{display:true,text:'Day of Week',color:'#506070',font:{size:10}},
+                        min:-0.5, max:6.5,
+                        ticks:{
+                            stepSize:1,
+                            font:{size:10},
+                            callback: v => days[v] || ''
+                        },
+                        grid:{color:'#1e2d3d'}
+                    }
+                }
+            }
+        });
+    }
+
+    function renderCategory() {
+        if (S.charts.category) S.charts.category.destroy();
+        const ctx = document.getElementById('chart-category').getContext('2d');
+        const labels = S.data.categories.map(d => {
+            const s = d.l.replace(/_/g,' ');
+            return s.length > 18 ? s.match(/.{1,18}(?:\s|$)/g).map(x=>x.trim()) : s;
+        });
+
+        S.charts.category = new Chart(ctx, {
+            type:'bar',
+            data:{
+                labels,
+                datasets:[{
+                    data: S.data.categories.map(d=>d.v),
+                    backgroundColor: S.data.categories.map((_,i) =>
+                        `rgba(0,229,160,${1 - i*0.07})`
+                    ),
+                    borderRadius:5,
+                    borderSkipped:false
+                }]
+            },
+            options:{
+                indexAxis:'y',
+                responsive:true, maintainAspectRatio:false,
+                plugins:{
+                    legend:{display:false},
+                    tooltip:{
+                        backgroundColor:'#0d1117',
+                        borderColor:'#1e2d3d',
+                        borderWidth:1,
+                        padding:10,
+                        callbacks:{
+                            label: ctx => `$${ctx.raw.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`
+                        }
+                    }
+                },
+                scales:{
+                    x:{display:false},
+                    y:{grid:{display:false}, ticks:{font:{size:10}}}
+                }
+            }
+        });
+    }
+
+    function renderGeo() {
+        if (S.charts.geo) S.charts.geo.destroy();
+        const ctx = document.getElementById('chart-geo').getContext('2d');
+        const grad = ctx.createLinearGradient(0,0,0,300);
+        grad.addColorStop(0,'rgba(167,139,250,0.9)');
+        grad.addColorStop(1,'rgba(167,139,250,0.3)');
+
+        S.charts.geo = new Chart(ctx, {
+            type:'bar',
+            data:{
+                labels: S.data.geo.map(d=>d.l),
+                datasets:[{
+                    data: S.data.geo.map(d=>d.v),
+                    backgroundColor: grad,
+                    borderRadius:5,
+                    borderSkipped:false
+                }]
+            },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                plugins:{
+                    legend:{display:false},
+                    tooltip:{
+                        backgroundColor:'#0d1117',
+                        borderColor:'#1e2d3d',
+                        borderWidth:1,
+                        padding:10,
+                        callbacks:{
+                            label: ctx => `${ctx.raw.toLocaleString()} customers`
+                        }
+                    }
+                },
+                scales:{
+                    x:{grid:{display:false}, ticks:{font:{size:11,weight:'600'}}},
+                    y:{grid:{color:'#1e2d3d'}, beginAtZero:true, ticks:{font:{size:10}}}
+                }
+            }
+        });
+    }
+    </script>
+</body>
+</html>
